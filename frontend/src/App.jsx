@@ -7,8 +7,6 @@ import Traceroute from './components/Traceroute';
 import SpeedTest from './components/SpeedTest';
 import PortsScan from './components/PortsScan';
 import Whois from './components/Whois';
-import VpnCheck from './components/VpnCheck';
-import ExportResults from './components/ExportResults';
 import Charts from './components/Charts';
 import './App.css';
 
@@ -30,9 +28,7 @@ const App = () => {
       <SpeedTest onResult={(data) => updateResults('speedTest', data)} />
       <PortsScan onResult={(data) => updateResults('portsScan', data)} />
       <Whois onResult={(data) => updateResults('whois', data)} />
-      <VpnCheck onResult={(data) => updateResults('vpnCheck', data)} />
       <Charts results={results} />
-      <ExportResults results={results} />
     </div>
   );
 };

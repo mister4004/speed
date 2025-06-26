@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api } from '../utils/api';
+import api from "../utils/api";
 
 const Traceroute = () => {
   const [tracerouteHost, setTracerouteHost] = useState('google.com');

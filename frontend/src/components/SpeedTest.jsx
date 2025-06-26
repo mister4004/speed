@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api } from '../utils/api';
+import api from "../utils/api";
 
 const SpeedTest = () => {
   const [downloadSpeed, setDownloadSpeed] = useState(null);

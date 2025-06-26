@@ -20,6 +20,9 @@ import ExportController from './controllers/exportController.js';
 import config from './config/config.js';
 import logger from './utils/logger.js';
 
+// Добавлен импорт
+import infoRouter from './routes/infoRoutes.js';
+
 const app = express();
 const httpServer = createServer(app);
 const cache = new NodeCache(config.cache);
@@ -119,6 +122,9 @@ app.post('/api/v1/ports/scan', heavyOperationsLimit, validatePorts, validate, Po
 app.post('/api/v1/whois', validateWhois, validate, WhoisController.getWhois);
 app.get('/api/v1/info/vpn', VpnController.checkVpnProxy);
 app.post('/api/v1/export', ExportController.exportResults);
+
+// Добавлен новый роут
+app.use('/api/v1/info', infoRouter);
 
 app.use('/api/v1/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
