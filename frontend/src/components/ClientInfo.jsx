@@ -8,7 +8,9 @@ const ClientInfo = () => {
   const [loadingLocalIp, setLoadingLocalIp] = useState(false);
   const [errorClientInfo, setErrorClientInfo] = useState(null);
   const [errorLocalIp, setErrorLocalIp] = useState(null);
+  const [sessionId] = useState(Date.now().toString(36) + Math.random().toString(36).substr(2));
 
+  // Function to find local IP using WebRTC
   const findLocalIp = () => {
     return new Promise((resolve, reject) => {
       const pc = new RTCPeerConnection({ iceServers: [] });
@@ -22,18 +24,20 @@ const ClientInfo = () => {
           );
           if (ipMatch) {
             const ipAddress = ipMatch[0];
+            // Check for private IP ranges
             if (
               ipAddress.startsWith('192.168.') ||
               ipAddress.startsWith('10.') ||
               ipAddress.startsWith('172.16.')
             ) {
-              pc.onicecandidate = null;
-              pc.close();
-              resolve(ipAddress);
+              pc.onicecandidate = null; // Stop listening for candidates
+              pc.close(); // Close the peer connection
+              resolve(ipAddress); // Resolve with the local IP
               return;
             }
           }
         } else if (event.candidate === null) {
+          // All ICE candidates have been gathered
           pc.onicecandidate = null;
           pc.close();
           reject(
@@ -44,6 +48,7 @@ const ClientInfo = () => {
         }
       };
 
+      // Create an offer to start the ICE gathering process
       pc.createOffer()
         .then((offer) => pc.setLocalDescription(offer))
         .catch((err) => {
@@ -51,6 +56,7 @@ const ClientInfo = () => {
           reject(new Error(`Error creating WebRTC offer: ${err.message}`));
         });
 
+      // Timeout to prevent infinite loading if no candidate is found
       setTimeout(() => {
         if (pc.iceConnectionState !== 'closed' && pc.iceConnectionState !== 'disconnected') {
           pc.close();
@@ -60,91 +66,64 @@ const ClientInfo = () => {
     });
   };
 
+  // Save client info to server
+  const saveClientInfo = async (data) => {
+    try {
+      await fetch('/api/v1/save-client-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          timestamp: new Date().toISOString(),
+          ...data
+        })
+      });
+    } catch (error) {
+      console.error('Error saving client info:', error);
+    }
+  };
+
+  // useEffect hook to load client and local IP information on component mount
   useEffect(() => {
     const loadInitialClientInfo = async () => {
       try {
         setLoadingClientInfo(true);
         setErrorClientInfo(null);
 
-        // Функция для получения геоданных с использованием нашего API
+        // Function to fetch geolocation data exclusively from ipinfo.io
         const fetchGeolocation = async () => {
           try {
-            // Используем наш собственный API эндпоинт
-            const response = await fetch('/api/v1/info/geolocation');
-            
+            const response = await fetch("https://ipinfo.io/json");
+
             if (!response.ok) {
-              throw new Error(`API error: ${response.status}`);
+              const errorText = await response.text();
+              throw new Error(`Failed to fetch from ipinfo.io: ${response.status} - ${errorText}`);
             }
-            
+
             const data = await response.json();
-            
-            // Проверяем формат ответа нашего API
-            if (data.status === 'success') {
-              return data; // Формат ip-api.com
-            } else if (data.ip) {
-              return data; // Формат ipinfo.io
+            // ipinfo.io returns an "ip" field on success
+            if (data.ip) {
+              return data;
             }
-            
-            throw new Error('Unexpected response format from geolocation API');
+            // If ip field is not present, it's an API-level error from ipinfo.io
+            throw new Error(`ipinfo.io error: ${data.error?.message || 'Unknown error'}`);
+
           } catch (error) {
             console.error('Geolocation API error:', error);
-            
-            // В случае ошибки пробуем резервные API
-            try {
-              // Резервный API 1
-              const backupRes1 = await fetch('https://ip-api.com/json', {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
-                }
-              });
-              if (backupRes1.ok) return await backupRes1.json();
-              
-              // Резервный API 2
-              const backupRes2 = await fetch('https://ipinfo.io/json');
-              if (backupRes2.ok) return await backupRes2.json();
-              
-              // Резервный API 3
-              const backupRes3 = await fetch('https://geolocation-db.com/json/');
-              if (backupRes3.ok) return await backupRes3.json();
-              
-              throw new Error('All backup APIs failed');
-            } catch (backupError) {
-              console.error('Backup APIs error:', backupError);
-              return null;
-            }
+            throw new Error(`Geolocation API error: ${error.message}`);
           }
         };
 
         const ipData = await fetchGeolocation();
-        
-        if (!ipData) {
-          throw new Error('Failed to get geolocation data from all sources');
+
+        // Process the data from ipinfo.io
+        if (!ipData || !ipData.ip) {
+            throw new Error('Failed to get geolocation data from ipinfo.io.');
         }
 
-        // Обработка разных форматов ответа
-        let geoData;
-        if (ipData.query) {
-          // Формат ip-api.com
-          geoData = {
-            ip: ipData.query,
-            country: ipData.country,
-            city: ipData.city,
-            region: ipData.regionName,
-            timezone: ipData.timezone,
-            lat: ipData.lat,
-            lon: ipData.lon,
-            isp: ipData.isp,
-            org: ipData.org,
-            as: ipData.as,
-            proxy: ipData.proxy,
-            mobile: ipData.mobile,
-            hosting: ipData.hosting,
-            zip: ipData.zip,
-          };
-        } else if (ipData.ip) {
-          // Формат ipinfo.io
-          const [lat, lon] = ipData.loc ? ipData.loc.split(',') : [0, 0];
-          geoData = {
+        const [lat, lon] = ipData.loc ? ipData.loc.split(',') : [0, 0];
+
+        const geoData = {
             ip: ipData.ip,
             country: ipData.country,
             city: ipData.city,
@@ -152,40 +131,19 @@ const ClientInfo = () => {
             timezone: ipData.timezone,
             lat: parseFloat(lat),
             lon: parseFloat(lon),
-            isp: ipData.org,
+            isp: ipData.org, // ipinfo.io uses 'org' for ISP/Organization
             org: ipData.org,
-            as: ipData.org,
-            proxy: false,
-            mobile: false,
-            hosting: false,
+            as: ipData.asn, // ipinfo.io uses 'asn' for AS
+            proxy: ipData.country === 'A1' ? true : false, // Placeholder, ipinfo.io may not directly indicate proxy
+            mobile: false, // Placeholder, ipinfo.io may not directly indicate mobile
+            hosting: false, // Placeholder, ipinfo.io may not directly indicate hosting
             zip: ipData.postal,
-          };
-        } else if (ipData.IPv4) {
-          // Формат geolocation-db.com
-          geoData = {
-            ip: ipData.IPv4,
-            country: ipData.country_name,
-            city: ipData.city,
-            region: ipData.state,
-            timezone: ipData.timezone || 'Unknown',
-            lat: parseFloat(ipData.latitude),
-            lon: parseFloat(ipData.longitude),
-            isp: ipData.ISP || 'Unknown',
-            org: ipData.organization || 'Unknown',
-            as: ipData.ASN || 'Unknown',
-            proxy: false,
-            mobile: false,
-            hosting: false,
-            zip: ipData.postal || 'Unknown',
-          };
-        } else {
-          throw new Error('Unknown geolocation data format');
-        }
+        };
 
         setIpInfo(geoData);
 
-        // Установка информации об устройстве
-        setDeviceInfo({
+        // Set device information
+        const deviceData = {
           browser:
             navigator.userAgent.match(/(Chrome|Firefox|Safari|Opera|Edge|MSIE)\/?\s*(\d+\.\d+)/i)?.[1] ||
             'Unknown',
@@ -205,7 +163,16 @@ const ClientInfo = () => {
           webRTC: typeof RTCPeerConnection !== 'undefined',
           cookiesEnabled: navigator.cookieEnabled,
           javaEnabled: navigator.javaEnabled(),
+        };
+
+        setDeviceInfo(deviceData);
+
+        // Save collected data to server
+        saveClientInfo({
+          ipInfo: geoData,
+          deviceInfo: deviceData
         });
+
       } catch (err) {
         setErrorClientInfo(err.message);
       } finally {
@@ -213,14 +180,25 @@ const ClientInfo = () => {
       }
     };
 
+    // Load local IP information
     const loadLocalIpInfo = async () => {
       setLoadingLocalIp(true);
       setErrorLocalIp(null);
       try {
         const ip = await findLocalIp();
         setLocalIp(ip);
+        
+        // Update saved data with local IP
+        saveClientInfo({
+          localIp: ip
+        });
       } catch (err) {
         setErrorLocalIp(err.message);
+        
+        // Save error information
+        saveClientInfo({
+          localIpError: err.message
+        });
       } finally {
         setLoadingLocalIp(false);
       }
@@ -228,8 +206,9 @@ const ClientInfo = () => {
 
     loadInitialClientInfo();
     loadLocalIpInfo();
-  }, []);
+  }, [sessionId]); // Dependency on sessionId ensures this runs once per session
 
+  // Spinner component for loading states
   const Spinner = () => (
     <div className="flex justify-center items-center">
       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -239,127 +218,126 @@ const ClientInfo = () => {
   return (
     <section className="bg-gray-50 p-6 rounded-lg shadow-md">
       <h2 className="text-2xl font-semibold text-blue-600 mb-4 text-center">
-        Информация о Вашем Соединении и Устройстве
+        Your Connection & Device Information
       </h2>
       {loadingClientInfo ? (
         <Spinner />
       ) : errorClientInfo ? (
         <p className="text-red-500 text-center">
-          Ошибка: {errorClientInfo}. Проверьте соединение или попробуйте позже.
+          Error: {errorClientInfo}. Please check your connection or try again later.
         </p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-blue-50 p-4 rounded-md shadow-sm">
-            <h3 className="text-xl font-medium text-blue-800 mb-2">Ваш Публичный IP и Геолокация</h3>
+            <h3 className="text-xl font-medium text-blue-800 mb-2">Your Public IP & Geolocation</h3>
             {ipInfo && (
               <div className="space-y-1 text-gray-700 text-sm">
                 <p>
                   <strong>IP:</strong> {ipInfo.ip}
                 </p>
                 <p>
-                  <strong>Страна:</strong> {ipInfo.country}
+                  <strong>Country:</strong> {ipInfo.country}
                 </p>
                 <p>
-                  <strong>Регион:</strong> {ipInfo.region}
+                  <strong>Region:</strong> {ipInfo.region}
                 </p>
                 <p>
-                  <strong>Город:</strong> {ipInfo.city}
+                  <strong>City:</strong> {ipInfo.city}
                 </p>
                 <p>
-                  <strong>Часовой пояс:</strong> {ipInfo.timezone}
+                  <strong>Timezone:</strong> {ipInfo.timezone}
                 </p>
                 <p>
-                  <strong>Провайдер (ISP):</strong> {ipInfo.isp}
+                  <strong>Provider (ISP):</strong> {ipInfo.isp}
                 </p>
                 <p>
-                  <strong>Организация:</strong> {ipInfo.org}
+                  <strong>Organization:</strong> {ipInfo.org}
                 </p>
                 <p>
-                  <strong>Автономная система (AS):</strong> {ipInfo.as}
+                  <strong>Autonomous System (AS):</strong> {ipInfo.as}
                 </p>
                 {ipInfo.proxy && (
                   <p className="text-orange-600">
-                    <strong>Используется прокси/VPN:</strong> Да
+                    <strong>Proxy/VPN Used:</strong> Yes
                   </p>
                 )}
                 {ipInfo.mobile && (
                   <p className="text-orange-600">
-                    <strong>Мобильное соединение:</strong> Да
+                    <strong>Mobile Connection:</strong> Yes
                   </p>
                 )}
                 {ipInfo.hosting && (
                   <p className="text-orange-600">
-                    <strong>Хостинг/ЦОД:</strong> Да
+                    <strong>Hosting/Datacenter:</strong> Yes
                   </p>
                 )}
                 <p>
-                  <strong>Координаты:</strong> {ipInfo.lat}, {ipInfo.lon}
+                  <strong>Coordinates:</strong> {ipInfo.lat}, {ipInfo.lon}
                 </p>
                 <p>
-                  <strong>Индекс:</strong> {ipInfo.zip}
+                  <strong>Zip Code:</strong> {ipInfo.zip}
                 </p>
               </div>
             )}
           </div>
           <div className="bg-green-50 p-4 rounded-md shadow-sm">
-            <h3 className="text-xl font-medium text-green-800 mb-2">Информация о Вашем Устройстве</h3>
+            <h3 className="text-xl font-medium text-green-800 mb-2">Your Device Information</h3>
             {deviceInfo && (
               <div className="space-y-1 text-gray-700 text-sm">
                 <p>
-                  <strong>Браузер:</strong> {deviceInfo.browser}
+                  <strong>Browser:</strong> {deviceInfo.browser}
                 </p>
                 <p>
-                  <strong>ОС:</strong> {deviceInfo.os}
+                  <strong>OS:</strong> {deviceInfo.os}
                 </p>
                 <p>
-                  <strong>Тип устройства:</strong> {deviceInfo.deviceType}
+                  <strong>Device Type:</strong> {deviceInfo.deviceType}
                 </p>
                 <p>
-                  <strong>Разрешение экрана:</strong> {deviceInfo.resolution}
+                  <strong>Screen Resolution:</strong> {deviceInfo.resolution}
                 </p>
                 <p>
-                  <strong>Язык браузера:</strong> {deviceInfo.language}
+                  <strong>Browser Language:</strong> {deviceInfo.language}
                 </p>
                 <p>
-                  <strong>Поддержка WebGL:</strong> {deviceInfo.webGL ? 'Да' : 'Нет'}
+                  <strong>WebGL Support:</strong> {deviceInfo.webGL ? 'Yes' : 'No'}
                 </p>
                 <p>
-                  <strong>Поддержка WebRTC:</strong> {deviceInfo.webRTC ? 'Да' : 'Нет'}
+                  <strong>WebRTC Support:</strong> {deviceInfo.webRTC ? 'Yes' : 'No'}
                 </p>
                 <p>
-                  <strong>Cookies включены:</strong> {deviceInfo.cookiesEnabled ? 'Да' : 'Нет'}
+                  <strong>Cookies Enabled:</strong> {deviceInfo.cookiesEnabled ? 'Yes' : 'No'}
                 </p>
                 <p>
-                  <strong>Java включена:</strong> {deviceInfo.javaEnabled ? 'Да' : 'Нет'}
+                  <strong>Java Enabled:</strong> {deviceInfo.javaEnabled ? 'Yes' : 'No'}
                 </p>
-                <p className="font-semibold mt-2">Полный User-Agent:</p>
+                <p className="font-semibold mt-2">Full User-Agent:</p>
                 <span className="break-all text-xs bg-gray-100 p-1 rounded">
                   {deviceInfo.userAgent}
                 </span>
               </div>
             )}
             <h3 className="text-xl font-medium text-green-800 mb-2 mt-4">
-              Локальный IP (WebRTC)
+              Local IP (WebRTC)
             </h3>
             {loadingLocalIp ? (
               <Spinner />
             ) : errorLocalIp ? (
               <p className="text-red-500">
-                Ошибка: {errorLocalIp}
+                Error: {errorLocalIp}
                 <br />
                 <span className="text-xs text-gray-500">
-                  WebRTC может быть отключен в браузере или блокирован VPN/Proxy. Проверьте
-                  настройки браузера или попробуйте отключить VPN.
+                  WebRTC might be disabled in your browser or blocked by VPN/Proxy. Check
+                  browser settings or try disabling your VPN.
                 </span>
               </p>
             ) : (
               <p className="text-gray-700 text-sm">
-                <strong>Локальный IP:</strong>{' '}
-                {localIp || 'Не определен (может быть скрыт VPN/Proxy или нет поддержки WebRTC)'}
+                <strong>Local IP:</strong>{' '}
+                {localIp || 'Undefined (may be hidden by VPN/Proxy or no WebRTC support)'}
                 <br />
                 <span className="text-xs text-gray-500">
-                  Если ваш публичный IP отличается от локального IP, это может указывать на
-                  утечку.
+                  If your public IP differs from your local IP, this might indicate a leak.
                 </span>
               </p>
             )}

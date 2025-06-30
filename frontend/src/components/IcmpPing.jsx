@@ -29,7 +29,8 @@ const IcmpPing = () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.post('/ping', { host: pingHost, count: parseInt(pingCount) });
+      // ИСПРАВЛЕНО: Используем api.runPing вместо api.post
+      const result = await api.runPing({ host: pingHost, count: parseInt(pingCount) });
       setPingResult(result.data);
     } catch (err) {
       setError(err.message || 'Ошибка при выполнении пинга.');

@@ -1,43 +1,98 @@
-import React, { useState } from 'react';
-import api from "../utils/api";
+import React, { useState, useEffect, useRef } from 'react';
 
 const Traceroute = () => {
   const [tracerouteHost, setTracerouteHost] = useState('google.com');
-  const [tracerouteMaxHops, setTracerouteMaxHops] = useState(5);
-  const [tracerouteResult, setTracerouteResult] = useState(null);
+  const [tracerouteMaxHops, setTracerouteMaxHops] = useState(15);
+  const [tracerouteResultHops, setTracerouteResultHops] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [statusMessage, setStatusMessage] = useState('');
+  const wsRef = useRef(null);
 
   const validateHost = (host) => {
     const hostRegex = /^(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3})$/;
     return hostRegex.test(host);
   };
 
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
   const handleRunTraceroute = async () => {
     if (!tracerouteHost) {
-      setError('Введите хост для traceroute.');
+      setError('Please enter a host for traceroute.');
       return;
     }
     if (!validateHost(tracerouteHost)) {
-      setError('Некорректный хост. Введите домен (example.com) или IP (8.8.8.8).');
+      setError('Invalid host. Please enter a domain (example.com) or IP (8.8.8.8).');
       return;
     }
     if (tracerouteMaxHops < 1 || tracerouteMaxHops > 30) {
-      setError('Количество хопов должно быть от 1 до 30.');
+      setError('Max hops must be between 1 and 30.');
       return;
     }
+
     setLoading(true);
     setError(null);
+    setTracerouteResultHops([]);
+    setStatusMessage('Initializing traceroute...');
+
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
     try {
-      const result = await api.post('/traceroute', {
-        host: tracerouteHost,
-        maxHops: parseInt(tracerouteMaxHops),
-      });
-      setTracerouteResult(result.data);
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/ws/traceroute?host=${tracerouteHost}&maxHops=${tracerouteMaxHops}`;
+
+      wsRef.current = new WebSocket(wsUrl);
+
+      wsRef.current.onopen = () => {
+        setStatusMessage('Connection established. Starting traceroute...');
+      };
+
+      wsRef.current.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'hop') {
+          setTracerouteResultHops((prevHops) => [...prevHops, data.data]);
+          setStatusMessage(`Received hop ${data.data.hop}...`);
+        } else if (data.type === 'completed') {
+          setStatusMessage('Traceroute completed!');
+          if (data.data.cached && data.data.hops) {
+            setTracerouteResultHops(data.data.hops);
+            setStatusMessage('Traceroute loaded from cache.');
+          }
+          setLoading(false);
+        } else if (data.type === 'error') {
+          setError(data.message || 'WebSocket Error.');
+          setLoading(false);
+          setStatusMessage('Traceroute failed.');
+        }
+      };
+
+      wsRef.current.onclose = () => {
+        if (loading) {
+          setError('WebSocket connection closed before traceroute completion.');
+          setLoading(false);
+          setStatusMessage('Traceroute interrupted.');
+        }
+      };
+
+      wsRef.current.onerror = (wsError) => {
+        console.error('WebSocket Error:', wsError);
+        setError('A WebSocket error occurred. Check console for details.');
+        setLoading(false);
+        setStatusMessage('Connection error.');
+      };
+
     } catch (err) {
-      setError(err.message || 'Ошибка при выполнении traceroute.');
-    } finally {
+      setError(err.message || 'Failed to establish WebSocket connection.');
       setLoading(false);
+      setStatusMessage('Connection error.');
     }
   };
 
@@ -47,29 +102,61 @@ const Traceroute = () => {
     </div>
   );
 
+  // Функция для форматирования вывода одного хопа
+  const formatHopOutput = (hop) => {
+    const hasTimes = hop.times && hop.times.length > 0;
+    
+    // Если нет ответа
+    if (!hasTimes) {
+      return <span className="text-gray-500">* * * (No response)</span>;
+    }
+
+    // Вычисляем среднее время
+    const avgTime = (hop.times.reduce((sum, val) => sum + val, 0) / hop.times.length).toFixed(2);
+    
+    // Форматируем отдельные времена
+    const timesFormatted = hop.times.map(t => t.toFixed(2)).join(', ');
+    
+    // Определяем отображаемое имя
+    const displayName = hop.hostname || hop.ip || 'Unknown';
+    
+    return (
+      <div className="flex flex-col">
+        <span className="font-medium">
+          {displayName} {hop.ip && hop.ip !== hop.hostname && <span className="text-gray-600">({hop.ip})</span>}
+        </span>
+        <div className="text-sm text-gray-600">
+          Avg: <span className="font-medium">{avgTime}ms</span> [
+          <span className="text-gray-500">{timesFormatted}ms</span>]
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <section className="bg-gray-50 p-6 rounded-lg shadow-md">
+    <section className="bg-gray-50 p-6 rounded-lg shadow-md h-full flex flex-col">
       <h2 className="text-2xl font-semibold text-indigo-600 mb-4 text-center">
-        Traceroute Тест (с сервера)
+        Traceroute Test (from server)
       </h2>
       <p className="text-sm text-gray-600 mb-3 text-center">
-        Этот тест выполняет Traceroute с диагностического сервера до указанного хоста.
+        This test performs a Traceroute from the diagnostic server to the specified host, showing intermediate nodes.
       </p>
-      <div className="space-y-3">
+      <div className="space-y-3 mb-4">
         <div>
           <label
             htmlFor="tracerouteHost"
             className="block text-sm font-medium text-gray-700"
           >
-            Хост:
+            Host:
           </label>
           <input
             type="text"
             id="tracerouteHost"
             value={tracerouteHost}
             onChange={(e) => setTracerouteHost(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 px-3 py-2"
+            className="input-field"
             placeholder="google.com"
+            disabled={loading}
           />
         </div>
         <div>
@@ -77,7 +164,7 @@ const Traceroute = () => {
             htmlFor="tracerouteMaxHops"
             className="block text-sm font-medium text-gray-700"
           >
-            Макс. хопов (1-30):
+            Max Hops (1-30):
           </label>
           <input
             type="number"
@@ -86,29 +173,37 @@ const Traceroute = () => {
             onChange={(e) => setTracerouteMaxHops(e.target.value)}
             min="1"
             max="30"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 px-3 py-2"
+            className="input-field"
+            disabled={loading}
           />
         </div>
         <button
           onClick={handleRunTraceroute}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out flex items-center justify-center"
+          className="btn-primary"
           disabled={loading}
         >
-          {loading ? <Spinner /> : 'Запустить Traceroute'}
+          {loading ? <Spinner /> : 'Run Traceroute'}
         </button>
       </div>
-      {error && <p className="text-red-500 mt-2">Ошибка: {error}</p>}
-      {tracerouteResult && (
-        <div className="mt-4 bg-gray-50 p-2 rounded-md text-sm overflow-auto max-h-48">
-          <p>
-            <strong>Хост:</strong> {tracerouteResult.host}
-          </p>
-          <p className="font-semibold mt-2">Хопы:</p>
-          <ul className="list-disc list-inside ml-4">
-            {tracerouteResult.hops.map((hop, index) => (
-              <li key={index}>
-                {hop.hop}: {hop.ip || 'N/A'}{' '}
-                {hop.times.length > 0 ? `(${hop.times.join(' ms, ')} ms)` : ''}
+
+      {error && <p className="text-red-500 mt-2 text-center text-sm">Error: {error}</p>}
+
+      {loading && statusMessage && (
+        <p className="text-gray-600 mt-2 text-center text-sm">{statusMessage}</p>
+      )}
+
+      {tracerouteResultHops.length > 0 && (
+        <div className="mt-4 bg-gray-100 p-4 rounded-md text-sm overflow-auto max-h-80 flex-grow">
+          <p className="font-semibold mb-2">Traceroute Results:</p>
+          <ul className="list-decimal list-inside ml-4 space-y-2">
+            {tracerouteResultHops.map((hop, index) => (
+              <li key={hop.hop || index} className="break-all">
+                <div className="flex items-start">
+                  <span className="font-bold min-w-[30px]">{hop.hop}:</span>
+                  <div className="flex-1">
+                    {formatHopOutput(hop)}
+                  </div>
+                </div>
               </li>
             ))}
           </ul>

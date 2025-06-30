@@ -4,54 +4,63 @@ dotenv.config();
 
 const config = {
   port: process.env.PORT || 3001,
-  host: process.env.HOST || '0.0.0.0', // Изменено на '0.0.0.0' для поддержки внешних подключений
+  host: process.env.HOST || '0.0.0.0',
 
   // Rate limiting
   rateLimit: {
-    windowMs: 15 * 60 * 1000, // 15 минут
-    max: 100, // Максимум 100 запросов с одного IP
+    windowMs: 15 * 60 * 1000,
+    max: 300, // Увеличено для общего трафика
     message: 'Too many requests from this IP',
   },
 
-  // Heavy operations rate limiting (ping, traceroute, speedtest, ports scan)
+  // Heavy operations rate limiting (только для ping/traceroute/ports scan)
   heavyRateLimit: {
-    windowMs: 15 * 60 * 1000, // 15 минут
-    max: 10, // Максимум 10 тяжелых операций с одного IP
+    windowMs: 15 * 60 * 1000,
+    max: 50, // Увеличено для тяжелых операций
     message: 'Too many heavy operations from this IP',
   },
 
-  // Безопасные хосты для ping, traceroute, ports scan
-  allowedHosts: [
-    '8.8.8.8', // Google DNS
-    '1.1.1.1', // Cloudflare DNS
-    '208.67.222.222', // OpenDNS
-    '77.88.8.8', // Яндекс DNS
-    'google.com',
-    'cloudflare.com',
-    'yandex.ru',
-    'github.com',
-    'example.com', // Добавлен для тестирования
-  ],
+  // Speedtest rate limiting
+  speedtestRateLimit: {
+    windowMs: 2 * 60 * 1000, // 2 минуты
+    max: 500, // Увеличено: 500 запросов за 2 минуты (для поддержки 8 потоков)
+    message: 'Too many speedtest requests from this IP',
+  },
 
-  // Максимальные значения для безопасности
+  // Безопасные хосты (оставьте ваши фактические значения)
+  allowedHosts: ['https://cloud-hosts.org', 'https://www.cloud-hosts.org', 'http://localhost:3000'],
+
+  // Максимальные значения
   limits: {
-    pingCount: 4, // Максимальное количество пингов
-    tracerouteMaxHops: 30, // Максимальное количество хопов для traceroute
-    timeout: 30000, // Таймаут для операций (30 секунд)
-    maxPorts: 10, // Максимальное количество портов для сканирования
+    pingCount: 4,
+    tracerouteMaxHops: 30,
+    timeout: 30000,
+    maxPorts: 10,
+
+    // Оптимизированные настройки для speedtest
+    speedtest: {
+      maxThreads: 8,             // ИЗМЕНЕНО: Макс. потоков до 8
+      minThreads: 1,             // ИЗМЕНЕНО: Мин. потоков для гибкости
+      dynamicThreading: false,   // ИЗМЕНЕНО: Пока выключено (не динамический тест)
+      maxFileSize: 300,          // ИЗМЕНЕНО: Макс. размер файла до 300 MB
+      minFileSize: 15,           // ДОБАВЛЕНО: Мин. размер файла 15 MB
+      defaultFileSize: 50,       // Размер файла по умолчанию
+      maxDuration: 15000,        // Макс. длительность теста (ms)
+      defaultServerThreads: 4    // Оптимальное количество потоков для сервера (можно настроить)
+    }
   },
 
-  // Кеширование
+  // Cache (оставьте ваши фактические значения)
   cache: {
-    ttl: 300, // 5 минут
-    checkperiod: 120, // Проверка каждые 2 минуты
+    stdTTL: 100, // Default TTL in seconds for cache
+    checkperiod: 120, // How often to check for expired keys
   },
 
-  // WebSocket настройки
+  // WebSocket (оставьте ваши фактические значения)
   websocket: {
-    maxConnections: 100, // Максимальное количество одновременных WebSocket-соединений
-    pingInterval: 30000, // Интервал пинга для поддержания соединения (30 секунд)
-  },
+    maxConnections: 50,
+    connectionTimeout: 30000,
+  }
 };
 
 export default config;

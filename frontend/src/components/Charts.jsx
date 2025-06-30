@@ -2,10 +2,11 @@ import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const Charts = ({ results }) => {
-  const pingData = results.icmpPing?.responses?.map((response, index) => ({
-    name: `Ping ${index + 1}`,
-    time: response.time,
-  })) || [];
+  // Removed pingData as ICMP Ping test is no longer present
+  // const pingData = results.icmpPing?.responses?.map((response, index) => ({
+  //   name: `Ping ${index + 1}`,
+  //   time: response.time,
+  // })) || [];
 
   const speedData = results.speedTest
     ? [
@@ -15,11 +16,13 @@ const Charts = ({ results }) => {
     : [];
 
   return (
-    <div className="charts">
-      <h2>Network Performance Charts</h2>
-      {pingData.length > 0 && (
+    <section className="bg-gray-50 p-6 rounded-lg shadow-md"> {/* Changed div to section for consistency */}
+      <h2 className="text-2xl font-semibold text-gray-800 mb-4 text-center">Network Performance Charts</h2> {/* Adjusted text color and margins for consistency */}
+      
+      {/* Removed Ping Response Times chart */}
+      {/* {pingData.length > 0 && (
         <div>
-          <h3>Ping Response Times</h3>
+          <h3 className="text-xl font-medium text-gray-700 mb-2 text-center">Ping Response Times</h3>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={pingData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -31,10 +34,11 @@ const Charts = ({ results }) => {
             </LineChart>
           </ResponsiveContainer>
         </div>
-      )}
+      )} */}
+      
       {speedData.length > 0 && (
         <div>
-          <h3>Speed Test</h3>
+          <h3 className="text-xl font-medium text-gray-700 mb-2 text-center">Speed Test Results</h3> {/* Changed title */}
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={speedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -47,8 +51,10 @@ const Charts = ({ results }) => {
           </ResponsiveContainer>
         </div>
       )}
-      {!pingData.length && !speedData.length && <p>No data available for charts.</p>}
-    </div>
+      
+      {/* Check if both pingData and speedData are empty */}
+      {speedData.length === 0 && <p className="text-center text-gray-600 mt-4">No data available for charts.</p>}
+    </section>
   );
 };
 

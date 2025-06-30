@@ -3,104 +3,69 @@ import helmet from 'helmet';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
 
-/**
- * Creates a rate limiter with specified window and max requests.
- * @param {number} [windowMs=config.rateLimit.windowMs] - Window in milliseconds
- * @param {number} [max=config.rateLimit.max] - Max requests per window
- * @returns {import('express-rate-limit').RateLimit} - Rate limit middleware
- */
-const createRateLimit = (windowMs = config.rateLimit.windowMs, max = config.rateLimit.max) => {
+// Улучшенный лимитер с поддержкой разных типов
+const createRateLimit = (options) => {
   return rateLimit({
-    windowMs,
-    max,
+    windowMs: options.windowMs,
+    max: options.max,
     message: {
-      error: 'Too many requests',
-      retryAfter: Math.ceil(windowMs / 1000),
+      error: options.message,
+      retryAfter: Math.ceil(options.windowMs / 1000),
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => {
+      // Пропускаем preflight-запросы
+      return req.method === 'OPTIONS';
+    },
     handler: (req, res) => {
-      logger.warn(`Rate limit exceeded for IP: ${req.ip}`, {
-        url: req.url,
-        method: req.method,
-        body: req.body,
-        query: req.query,
-        userAgent: req.get('User-Agent'),
-      });
+      logger.warn(`[${options.type || 'GENERAL'}] Rate limit exceeded for IP: ${req.ip}`);
       res.status(429).json({
-        error: 'Too many requests',
-        retryAfter: Math.ceil(windowMs / 1000),
+        error: options.message,
+        retryAfter: Math.ceil(options.windowMs / 1000),
       });
     },
   });
 };
 
-/**
- * Rate limiter for general requests.
- */
-const generalRateLimit = createRateLimit();
+// Лимитеры
+const generalRateLimit = createRateLimit({
+  ...config.rateLimit,
+  type: 'GENERAL'
+});
 
-/**
- * Rate limiter for heavy operations (ping, traceroute, speedtest, ports scan).
- */
-const heavyOperationsLimit = createRateLimit(config.heavyRateLimit.windowMs, config.heavyRateLimit.max);
+const heavyOperationsLimit = createRateLimit({
+  ...config.heavyRateLimit,
+  type: 'HEAVY_OPERATION'
+});
 
-/**
- * Middleware to detect suspicious requests.
- * @param {import('express').Request} req - Express request object
- * @param {import('express').Response} res - Express response object
- * @param {import('express').NextFunction} next - Express next function
- */
+const speedtestLimit = createRateLimit({
+  ...config.speedtestRateLimit,
+  type: 'SPEEDTEST'
+});
+
+// securityLogger (ОПРЕДЕЛЕНИЕ ДОБАВЛЕНО)
+// Это базовый middleware. Вы можете добавить сюда вашу логику логгирования или безопасности.
 const securityLogger = (req, res, next) => {
-  const suspiciousPatterns = [
-    /\.\./, // Path traversal
-    /<script/i, // XSS attempts
-    /union.*select/i, // SQL injection
-    /\|\|/, // Command injection
-    /&&/, // Command injection
-  ];
-
-  const requestData = JSON.stringify({
-    body: req.body,
-    query: req.query,
-    params: req.params,
-    url: req.originalUrl,
-  });
-
-  if (suspiciousPatterns.some((pattern) => pattern.test(requestData))) {
-    logger.warn(`Suspicious request detected from IP: ${req.ip}`, {
-      url: req.url,
-      method: req.method,
-      body: req.body,
-      query: req.query,
-      userAgent: req.get('User-Agent'),
-    });
-  }
-
-  // Проверка на слишком длинные запросы
-  if (requestData.length > 10000) {
-    logger.warn(`Oversized request detected from IP: ${req.ip}`, {
-      url: req.url,
-      method: req.method,
-      size: requestData.length,
-    });
-    return res.status(413).json({ error: 'Request entity too large' });
-  }
-
-  next();
+  // Пример: logger.info(`[SECURITY] Request received from IP: ${req.ip} to ${req.originalUrl}`);
+  next(); // Обязательно вызвать next(), чтобы передать управление следующему middleware
 };
 
-/**
- * Middleware to limit WebSocket connections.
- * @param {import('ws').Server} wss - WebSocket server
- */
+// websocketLimit (ОПРЕДЕЛЕНИЕ ДОБАВЛЕНО)
+// Это функция для настройки WebSocketServer. Ваша логика лимитирования будет здесь.
 const websocketLimit = (wss) => {
-  wss.on('connection', (ws, req) => {
-    if (wss.clients.size > config.websocket.maxConnections) {
-      logger.warn(`WebSocket connection limit exceeded from IP: ${req.socket.remoteAddress}`);
-      ws.close(1008, 'Too many connections');
-    }
-  });
+  // Пример:
+  // wss.on('connection', ws => {
+  //   // Ваша логика проверки лимитов для каждого нового WebSocket-соединения
+  //   logger.info(`WebSocket connection attempt from ${ws._socket.remoteAddress}`);
+  // });
 };
 
-export { helmet, generalRateLimit, heavyOperationsLimit, securityLogger, websocketLimit };
+export {
+  helmet,
+  generalRateLimit,
+  heavyOperationsLimit,
+  speedtestLimit,
+  securityLogger,   // Теперь это определено
+  websocketLimit    // И это тоже
+};

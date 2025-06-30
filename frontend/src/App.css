@@ -1,5 +1,16 @@
+/* Ваши существующие стили из App.css, с ДОБАВЛЕННЫМИ ИЗМЕНЕНИЯМИ ДЛЯ html И body */
+
+/* Общие стили для html и body, чтобы они занимали всю доступную ширину */
+html, body {
+  width: 100%; /* Убедимся, что они занимают 100% ширины */
+  margin: 0; /* Убираем любые внешние отступы, которые могут быть по умолчанию */
+  padding: 0; /* Убираем любые внутренние отступы по умолчанию */
+  overflow-x: hidden; /* Предотвращаем горизонтальную прокрутку на уровне документа */
+}
+
+/* Ваши существующие стили для #root */
 #root {
-  max-width: 1280px;
+  /* max-width: 1280px;  <-- ЭТОЙ СТРОКИ НЕ ДОЛЖНО БЫТЬ ИЛИ ОНА ДОЛЖНА БЫТЬ ЗАКОММЕНТИРОВАНА */
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
@@ -39,4 +50,85 @@
 
 .read-the-docs {
   color: #888;
+}
+
+/* ************************************************* */
+/* Добавленные/обновленные стили для компонентов и исправления проблемы WHOIS */
+/* ************************************************* */
+
+/* Базовые стили для тела страницы и общей компоновки */
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  color: #374151; /* text-gray-700 */
+  /* Убедимся, что никаких max-width или width нет на body */
+  max-width: none; /* Сбрасываем потенциальные max-width */
+  width: 100%; /* Убедимся, что body занимает всю ширину */
+}
+
+/* Базовые стили для карточки диагностики (используется в Whois.jsx и, вероятно, других компонентах) */
+.diagnostic-card {
+  @apply bg-gradient-card rounded-3xl shadow-card hover:shadow-card-hover transition-all duration-300 p-8 flex flex-col;
+}
+
+/* Стили для полей ввода (используется в Whois.jsx) */
+.input-field {
+  @apply block w-full px-4 py-2 text-base text-gray-800 bg-white border border-gray-300 rounded-xl shadow-inner-light focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+}
+
+/* Стили для основных кнопок (используется в Whois.jsx) */
+.btn-primary {
+  @apply bg-primary-600 text-white font-medium py-2 px-4 rounded-xl shadow-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center;
+}
+
+/* Стили для спиннера загрузки (используется в Whois.jsx) */
+.loading-spinner {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid #fff;
+  border-radius: 50%;
+  width: 1em; /* Размер спиннера относительно размера шрифта */
+  height: 1em; /* Размер спиннера относительно размера шрифта */
+  animation: spin 1s linear infinite;
+  display: inline-block;
+  margin-right: 0.5em; /* Добавляем небольшой отступ справа от спиннера */
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* **СТИЛИ ДЛЯ РЕШЕНИЯ ПРОБЛЕМЫ ПЕРЕПОЛНЕНИЯ WHOIS-РЕЗУЛЬТАТОВ** */
+.whois-results {
+  /* Разрешает перенос строк внутри <pre> тега, сохраняя при этом пробелы */
+  white-space: pre-wrap;
+  
+  /* Переносит длинные слова, которые выходят за пределы контейнера */
+  word-wrap: break-word; /* Старый синтаксис */
+  overflow-wrap: break-word; /* Современный синтаксис */
+  
+  /* Добавляет горизонтальную полосу прокрутки, если содержимое все еще выходит за рамки
+     после переноса слов (например, из-за очень длинного непрерывного слова) */
+  overflow-x: auto;
+  
+  /* Дополнительно: можно ограничить высоту блока и добавить вертикальную прокрутку,
+     если результаты WHOIS очень длинные. Это поможет избежать слишком высоких блоков. */
+  max-height: 400px; /* Пример высоты, можно настроить */
+  overflow-y: auto;
+  
+  /* Убедимся, что используется моноширинный шрифт для pre-formatted текста. */
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  
+  /* Уменьшаем немного размер шрифта, если "самые мелкие" стали слишком большими и мешают.
+     Это соответствует `sm` (small) размеру шрифта из TailwindCSS (14px).
+     Если проблема только в переполнении, и текущий размер шрифта устраивает,
+     можете удалить эту строку. Но для лучшей читаемости и компоновки
+     на небольших экранах, это может быть полезно. */
+  font-size: 0.875rem; /* 14px */
+
+  /* Добавляем внутренний отступ для текста внутри самого <pre> тега,
+     если `p-6` на родительском div недостаточно. */
+  padding: 1rem; /* Дополнительный внутренний отступ 16px */
 }

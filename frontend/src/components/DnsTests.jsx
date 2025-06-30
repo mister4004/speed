@@ -14,14 +14,27 @@ const DnsTests = () => {
   const [errorDnsLookup, setErrorDnsLookup] = useState(null);
   const [errorClientDns, setErrorClientDns] = useState(null);
 
+  // Функция для преобразования кодов статуса DNS в текст
+  const getDnsStatusText = (status) => {
+    const statusCodes = {
+      0: "No Error",
+      1: "Format Error",
+      2: "Server Failure",
+      3: "Non-Existent Domain",
+      4: "Not Implemented",
+      5: "Query Refused"
+    };
+    return statusCodes[status] || `Unknown (${status})`;
+  };
+
   const handleGetDnsServers = async () => {
     setLoadingDnsServers(true);
     setErrorDnsServers(null);
     try {
-      const result = await api.post('/dns/servers');
+      const result = await api.getDNSServers();
       setDnsServersResult(result.data);
     } catch (err) {
-      setErrorDnsServers(err.message || 'Ошибка при получении DNS-серверов.');
+      setErrorDnsServers(err.message || 'Error fetching DNS servers.');
     } finally {
       setLoadingDnsServers(false);
     }
@@ -29,16 +42,16 @@ const DnsTests = () => {
 
   const handleRunDnsLookup = async () => {
     if (!dnsLookupHost) {
-      setErrorDnsLookup('Введите хост для DNS-запроса.');
+      setErrorDnsLookup('Please enter a host for DNS query.');
       return;
     }
     setLoadingDnsLookup(true);
     setErrorDnsLookup(null);
     try {
-      const result = await api.post('/dns/lookup', { host: dnsLookupHost, type: dnsLookupType });
+      const result = await api.dnsLookup({ host: dnsLookupHost, type: dnsLookupType });
       setDnsLookupResult(result.data);
     } catch (err) {
-      setErrorDnsLookup(err.message || 'Ошибка при выполнении DNS Lookup.');
+      setErrorDnsLookup(err.message || 'Error performing DNS Lookup.');
     } finally {
       setLoadingDnsLookup(false);
     }
@@ -46,24 +59,35 @@ const DnsTests = () => {
 
   const handleRunClientDns = async () => {
     if (!dnsLookupHost) {
-      setErrorClientDns('Введите хост для клиентского DNS-теста.');
+      setErrorClientDns('Please enter a host for client DNS test.');
       return;
     }
     setLoadingClientDns(true);
     setErrorClientDns(null);
     try {
-      const response = await fetch(
-        `https://dns.google/resolve?name=${encodeURIComponent(dnsLookupHost)}&type=${dnsLookupType}`
-      );
-      if (!response.ok) {
-        throw new Error(`Client DNS error: ${response.status}`);
+      console.log('Starting client DNS lookup for', dnsLookupHost, dnsLookupType);
+      
+      // ИСПРАВЛЕНИЕ 1: Получаем data из ответа
+      const response = await api.clientDnsLookup(dnsLookupHost, dnsLookupType);
+      const resultData = response.data; // Исправлено здесь
+      console.log('Client DNS lookup result:', resultData);
+      
+      // ИСПРАВЛЕНИЕ 2: Проверяем наличие ответа
+      if (resultData && resultData.Answer) {
+        setClientDnsResult(resultData);
+      } else {
+        console.warn('No valid Answer in response:', resultData);
+        setClientDnsResult({ 
+          Question: [{ name: dnsLookupHost, type: dnsLookupType }], 
+          Answer: [],
+          Status: resultData?.Status || 3 // Non-Existent Domain
+        });
       }
-      const data = await response.json();
-      setClientDnsResult(data);
     } catch (err) {
+      console.error('Client DNS lookup error:', err);
       setErrorClientDns(
         err.message ||
-          'Ошибка при выполнении клиентского DNS-теста. Проверьте соединение или попробуйте другой хост.'
+          'Error performing client DNS test. Check connection or try another host.'
       );
     } finally {
       setLoadingClientDns(false);
@@ -79,33 +103,33 @@ const DnsTests = () => {
   return (
     <section className="bg-gray-50 p-6 rounded-lg shadow-md">
       <h2 className="text-2xl font-semibold text-purple-600 mb-4 text-center">
-        DNS Тесты
+        DNS Tests
       </h2>
       <p className="text-sm text-gray-600 mb-3 text-center">
-        Тестирование DNS-серверов и записей. Включает тесты с диагностического сервера и клиентского устройства.
+        Tests DNS servers and records. Includes tests from the diagnostic server and client device.
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-purple-50 p-4 rounded-md shadow-sm">
           <h3 className="text-xl font-medium text-purple-800 mb-2">
-            DNS-серверы диагностического сервера
+            Diagnostic Server DNS Servers
           </h3>
           <p className="text-sm text-gray-600 mb-3">
-            Это DNS-серверы, используемые сервером приложения.
+            These are the DNS servers used by the application server.
           </p>
           <button
             onClick={handleGetDnsServers}
             className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out flex items-center justify-center"
             disabled={loadingDnsServers}
           >
-            {loadingDnsServers ? <Spinner /> : 'Показать DNS Серверы'}
+            {loadingDnsServers ? <Spinner /> : 'Show DNS Servers'}
           </button>
           {errorDnsServers && (
-            <p className="text-red-500 mt-2">Ошибка: {errorDnsServers}</p>
+            <p className="text-red-500 mt-2">Error: {errorDnsServers}</p>
           )}
           {dnsServersResult && (
             <div className="mt-4 bg-gray-50 p-2 rounded-md text-sm overflow-auto max-h-48">
               <p>
-                <strong>Серверы:</strong>
+                <strong>Servers:</strong>
               </p>
               <ul className="list-disc list-inside ml-4">
                 {dnsServersResult.servers.map((server, index) => (
@@ -113,7 +137,7 @@ const DnsTests = () => {
                 ))}
               </ul>
               <p className="text-xs text-gray-500 mt-2">
-                Обновлено: {new Date(dnsServersResult.timestamp).toLocaleTimeString()}
+                Updated: {new Date(dnsServersResult.timestamp).toLocaleTimeString()}
               </p>
             </div>
           )}
@@ -121,12 +145,12 @@ const DnsTests = () => {
 
         <div className="bg-yellow-50 p-4 rounded-md shadow-sm">
           <h3 className="text-xl font-medium text-yellow-800 mb-2">
-            DNS Lookup (Сервер и Клиент)
+            DNS Lookup (Server & Client)
           </h3>
           <div className="space-y-3">
             <div>
               <label htmlFor="dnsHost" className="block text-sm font-medium text-gray-700">
-                Хост:
+                Host:
               </label>
               <input
                 type="text"
@@ -139,7 +163,7 @@ const DnsTests = () => {
             </div>
             <div>
               <label htmlFor="dnsType" className="block text-sm font-medium text-gray-700">
-                Тип записи:
+                Record Type:
               </label>
               <select
                 id="dnsType"
@@ -158,30 +182,30 @@ const DnsTests = () => {
                 className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out flex items-center justify-center"
                 disabled={loadingDnsLookup}
               >
-                {loadingDnsLookup ? <Spinner /> : 'Запустить DNS Lookup (Сервер)'}
+                {loadingDnsLookup ? <Spinner /> : 'Run DNS Lookup (Server)'}
               </button>
               <button
                 onClick={handleRunClientDns}
                 className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out flex items-center justify-center"
                 disabled={loadingClientDns}
               >
-                {loadingClientDns ? <Spinner /> : 'Запустить DNS Lookup (Клиент)'}
+                {loadingClientDns ? <Spinner /> : 'Run DNS Lookup (Client)'}
               </button>
             </div>
           </div>
           {errorDnsLookup && (
-            <p className="text-red-500 mt-2">Ошибка: {errorDnsLookup}</p>
+            <p className="text-red-500 mt-2">Error: {errorDnsLookup}</p>
           )}
           {dnsLookupResult && (
             <div className="mt-4 bg-gray-50 p-2 rounded-md text-sm overflow-auto max-h-48">
               <p>
-                <strong>Хост:</strong> {dnsLookupResult.host}
+                <strong>Host:</strong> {dnsLookupResult.host}
               </p>
               <p>
-                <strong>Тип:</strong> {dnsLookupResult.type}
+                <strong>Type:</strong> {dnsLookupResult.type}
               </p>
               <p>
-                <strong>Записи (Сервер):</strong>
+                <strong>Records (Server):</strong>
               </p>
               <ul className="list-disc list-inside ml-4">
                 {dnsLookupResult.records.map((record, index) => (
@@ -189,31 +213,43 @@ const DnsTests = () => {
                 ))}
               </ul>
               <p className="text-xs text-gray-500 mt-2">
-                Обновлено: {new Date(dnsLookupResult.timestamp).toLocaleTimeString()}
+                Updated: {new Date(dnsLookupResult.timestamp).toLocaleTimeString()}
               </p>
             </div>
           )}
           {errorClientDns && (
-            <p className="text-red-500 mt-2">Ошибка: {errorClientDns}</p>
+            <p className="text-red-500 mt-2">Error: {errorClientDns}</p>
           )}
           {clientDnsResult && (
             <div className="mt-4 bg-gray-50 p-2 rounded-md text-sm overflow-auto max-h-48">
+              {/* ИСПРАВЛЕНИЕ 3: Улучшенное отображение результатов */}
               <p>
-                <strong>Хост:</strong> {clientDnsResult.Question[0].name}
+                <strong>Status:</strong> {clientDnsResult.Status} ({getDnsStatusText(clientDnsResult.Status)})
               </p>
               <p>
-                <strong>Тип:</strong> {clientDnsResult.Question[0].type}
+                <strong>Host:</strong> {clientDnsResult.Question?.[0]?.name || dnsLookupHost}
               </p>
               <p>
-                <strong>Записи (Клиент):</strong>
+                <strong>Type:</strong> {clientDnsResult.Question?.[0]?.type || dnsLookupType}
+              </p>
+              
+              <p>
+                <strong>Records (Client):</strong>
               </p>
               <ul className="list-disc list-inside ml-4">
-                {clientDnsResult.Answer?.map((record, index) => (
-                  <li key={index}>{record.data}</li>
-                )) || <li>Нет данных</li>}
+                {clientDnsResult.Answer?.length > 0 ? (
+                  clientDnsResult.Answer.map((record, index) => (
+                    <li key={index}>
+                      {record.data || record.name} 
+                      <span className="text-xs text-gray-500 ml-2">(TTL: {record.TTL})</span>
+                    </li>
+                  ))
+                ) : (
+                  <li>No DNS records found</li>
+                )}
               </ul>
               <p className="text-xs text-gray-500 mt-2">
-                Обновлено: {new Date().toLocaleTimeString()}
+                Updated: {new Date().toLocaleTimeString()}
               </p>
             </div>
           )}

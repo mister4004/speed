@@ -1,0 +1,6 @@
+{
+  "telegram_bot_token": "7921057958:AAEX4r_uFkvM5aNUGOg1pGLrjjTVnBCt2Jk",
+  "telegram_chat_id": "1460068928",
+  "log_dir": "/data/www/cloud-hosts.org/backend/logs/client-info",
+  "check_interval_seconds": 300
+}

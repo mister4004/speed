@@ -11,45 +11,48 @@ const cache = new NodeCache({
 /**
  * @swagger
  * /api/v1/dns/lookup:
- *   post:
- *     summary: Perform DNS lookup
- *     tags: [DNS]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               host:
- *                 type: string
- *               type:
- *                 type: string
- *                 enum: [A, AAAA, MX, TXT, NS, CNAME, PTR]
- *     responses:
- *       200:
- *         description: DNS lookup result
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 host:
- *                   type: string
- *                 type:
- *                   type: string
- *                 records:
- *                   type: array
- *                   items:
- *                     type: string
- *                 cached:
- *                   type: boolean
- *                 timestamp:
- *                   type: string
- *       400:
- *         description: Invalid input
- *       500:
- *         description: Server error
+ * post:
+ * summary: Perform DNS lookup
+ * tags: [DNS]
+ * requestBody:
+ * required: true
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * host:
+ * type: string
+ * example: 'google.com'
+ * type:
+ * type: string
+ * enum: [A, AAAA, MX, TXT, NS, CNAME, PTR]
+ * example: 'A'
+ * responses:
+ * '200':
+ * description: DNS lookup result
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * host:
+ * type: string
+ * type:
+ * type: string
+ * records:
+ * type: array
+ * items:
+ * type: string
+ * cached:
+ * type: boolean
+ * timestamp:
+ * type: string
+ * format: date-time
+ * '400':
+ * description: Invalid input
+ * '500':
+ * description: Server error
  */
 const dnsLookup = async (req, res, next) => {
   const { host, type = 'A' } = req.body;
@@ -77,27 +80,27 @@ const dnsLookup = async (req, res, next) => {
 /**
  * @swagger
  * /api/v1/dns/servers:
- *   get:
- *     summary: Get system DNS servers
- *     tags: [DNS]
- *     responses:
- *       200:
- *         description: List of DNS servers
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 servers:
- *                   type: array
- *                   items:
- *                     type: string
- *                 cached:
- *                   type: boolean
- *                 timestamp:
- *                   type: string
- *       500:
- *         description: Server error
+ * get:
+ * summary: Get system DNS servers
+ * tags: [DNS]
+ * responses:
+ * '200':
+ * description: List of DNS servers
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * servers:
+ * type: array
+ * items:
+ * type: string
+ * cached:
+ * type: boolean
+ * timestamp:
+ * type: string
+ * '500':
+ * description: Server error
  */
 const getDNSServers = async (req, res, next) => {
   try {
@@ -123,40 +126,40 @@ const getDNSServers = async (req, res, next) => {
 /**
  * @swagger
  * /api/v1/dns/doh:
- *   post:
- *     summary: Check DNS over HTTPS support
- *     tags: [DNS]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               host:
- *                 type: string
- *     responses:
- *       200:
- *         description: DoH check result
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 host:
- *                   type: string
- *                 dohSupported:
- *                   type: boolean
- *                 responseTime:
- *                   type: number
- *                 cached:
- *                   type: boolean
- *                 timestamp:
- *                   type: string
- *       400:
- *         description: Invalid input
- *       500:
- *         description: Server error
+ * post:
+ * summary: Check DNS over HTTPS support
+ * tags: [DNS]
+ * requestBody:
+ * required: true
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * host:
+ * type: string
+ * responses:
+ * '200':
+ * description: DoH check result
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * host:
+ * type: string
+ * dohSupported:
+ * type: boolean
+ * responseTime:
+ * type: number
+ * cached:
+ * type: boolean
+ * timestamp:
+ * type: string
+ * '400':
+ * description: Invalid input
+ * '500':
+ * description: Server error
  */
 const checkDoH = async (req, res, next) => {
   const { host } = req.body;
@@ -178,7 +181,9 @@ const checkDoH = async (req, res, next) => {
     const endTime = performance.now();
 
     if (!response.ok) {
-      throw new Error(`DoH request failed: ${response.status}`);
+      const errorText = await response.text();
+      logger.error(`Error from dns.google for ${host} (${type}): ${response.status} - ${errorText}`);
+      throw new Error(`Failed to fetch from dns.google: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
@@ -197,4 +202,63 @@ const checkDoH = async (req, res, next) => {
   }
 };
 
-export default { dnsLookup, getDNSServers, checkDoH };
+/**
+ * @swagger
+ * /api/v1/dns/client-lookup-proxy:
+ * get:
+ * summary: Perform DNS lookup via server proxy for client-side tests
+ * tags: [DNS]
+ * parameters:
+ * - in: query
+ * name: host
+ * schema:
+ * type: string
+ * required: true
+ * description: The host to lookup
+ * - in: query
+ * name: type
+ * schema:
+ * type: string
+ * enum: [A, AAAA, MX, TXT, NS, CNAME, PTR]
+ * required: true
+ * description: The DNS record type
+ * responses:
+ * '200':
+ * description: Proxied DNS lookup result from dns.google
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * description: Raw response from dns.google/resolve
+ * '400':
+ * description: Invalid input
+ * '500':
+ * description: Server error or upstream API error
+ */
+const clientDnsLookupProxy = async (req, res, next) => {
+  const { host, type } = req.query; // Получаем параметры из query
+
+  if (!host || !type) {
+    return res.status(400).json({ error: 'Host and type are required query parameters.' });
+  }
+
+  try {
+    logger.info(`Proxying client DNS lookup for host: ${host}, type: ${type}`);
+    const response = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(host)}&type=${type}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`Error from dns.google for ${host} (${type}): ${response.status} - ${errorText}`);
+      throw new Error(`Failed to fetch from dns.google: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    res.status(200).json(data);
+  } catch (error) {
+    logger.error(`Error in clientDnsLookupProxy for ${host}:`, error);
+    next(error); // Передаем ошибку в центральный обработчик ошибок
+  }
+};
+
+
+export default { dnsLookup, getDNSServers, checkDoH, clientDnsLookupProxy };

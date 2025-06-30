@@ -1,0 +1,25 @@
+/* frontend/src/components/IPCalculator/styles/IPCalculator.css */
+
+/*
+   Этот файл предназначен для любых специфичных стилей,
+   которые нельзя легко выразить с помощью Tailwind CSS.
+   Большинство стилей уже обрабатывается Tailwind классами.
+*/
+
+/* Пример: Если вам нужна очень специфичная анимация, не доступная в Tailwind */
+/*
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in-component {
+  animation: fadeIn 0.5s ease-out;
+}
+*/
+
+/*
+   Обычно, для большинства компонентов, Tailwind CSS будет достаточен,
+   и этот файл может остаться пустым или использоваться для очень специфических
+   или глобальных переопределений, если это необходимо.
+*/
